@@ -2,74 +2,64 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"errors"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/HWCronicus/ssh-resume/src/models"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
-	loggingMiddleware "github.com/charmbracelet/wish/logging"
-	// teaMiddleware "github.com/charmbracelet/wish/bubbletea"
+	"github.com/charmbracelet/wish/activeterm"
+	"github.com/charmbracelet/wish/bubbletea"
+	"github.com/charmbracelet/wish/logging"
 )
 
-func StartServer(host string, port int, useApi bool) {
+const (
+	host = "localhost"
+	port = "42069"
+)
+
+func StartServer() {
 	s, err := wish.NewServer(
-		wish.WithAddress(fmt.Sprintf("%s:%d", host, port)),
-		wish.WithPublicKeyAuth(publicKeyHandler),
-		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
+		wish.WithAddress(net.JoinHostPort(host, port)),
+		wish.WithHostKeyPath(".ssh/id_ed25519"),
 		wish.WithMiddleware(
-			// teaMiddleware.Middleware(sshwordleTeaHandler(useApi)),
-			loggingMiddleware.Middleware(),
+			bubbletea.Middleware(teaHandler),
+			activeterm.Middleware(),
+			logging.Middleware(),
 		),
 	)
 	if err != nil {
-		log.Fatalln(err)
+		log.Error("Could not start server", "error", err)
 	}
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	log.Printf("Starting SSH server on %s:%d", host, port)
+	log.Info("Starting SSH server", "host", host, "port", port)
 	go func() {
-		if err = s.ListenAndServe(); err != nil {
-			log.Fatalln(err)
+		if err = s.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+			log.Error("Could not start server", "error", err)
+			done <- nil
 		}
 	}()
 
 	<-done
-	log.Println("Stopping SSH server")
-
+	log.Info("Stopping SSH server")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer func() { cancel() }()
-	if err := s.Shutdown(ctx); err != nil {
-		log.Fatalln(err)
+	if err := s.Shutdown(ctx); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+		log.Error("Could not stop server", "error", err)
 	}
 }
 
-func publicKeyHandler(_ctx ssh.Context, _key ssh.PublicKey) bool {
-	return true
+func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
+	pty, _, _ := s.Pty()
+	m := models.InitialModel(pty.Window.Height, pty.Window.Width)
+
+	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
-
-// func sshResumeHandler(useApi bool) teaMiddleware.Handler {
-// 	return func(session ssh.Session) (tea.Model, []tea.ProgramOption) {
-// 		pty, _, active := session.Pty()
-// 		if !active {
-// 			fmt.Println("no active terminal, skipping")
-// 			return nil, nil
-// 		}
-
-// 		rand.Seed(time.Now().UnixNano())
-
-// 		var backend Backend
-// 		if useApi {
-// 			backend = NewApiBackend()
-// 		} else {
-// 			backend = NewStaticBackend()
-// 		}
-
-// 		g := NewGame(pty.Window.Width, pty.Window.Height, session, backend)
-// 		return g, nil
-// 	}
-// }

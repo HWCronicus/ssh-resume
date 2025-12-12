@@ -19,12 +19,12 @@ const (
 	contactInfoView
 )
 
-type model struct {
-	currentView   view
-	width         int
-	height        int
-	cursor        int
-	terminalWidth int
+type Model struct {
+	CurrentView   view
+	Width         int
+	Height        int
+	Cursor        int
+	TerminalWidth int
 }
 
 var (
@@ -48,28 +48,30 @@ var (
 			Foreground(lipgloss.Color("241"))
 )
 
-func InitialModel() model {
-	return model{
-		currentView: mainView,
-		cursor:      0,
+func InitialModel(height, width int) Model {
+	return Model{
+		CurrentView: mainView,
+		Cursor:      0,
+		Height:      height,
+		Width:       width,
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.terminalWidth = msg.Width
+		m.TerminalWidth = msg.Width
 		if msg.Width > 200 {
-			m.width = 200
+			m.Width = 200
 		} else {
-			m.width = msg.Width
+			m.Width = msg.Width
 		}
-		m.height = msg.Height
+		m.Height = msg.Height
 		return m, nil
 
 	case tea.KeyMsg:
@@ -78,39 +80,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "left", "h":
-			if m.cursor > 0 {
-				m.cursor--
-				if m.currentView != mainView {
-					m.currentView = view(m.cursor + 1)
+			if m.Cursor > 0 {
+				m.Cursor--
+				if m.CurrentView != mainView {
+					m.CurrentView = view(m.Cursor + 1)
 				}
 			}
 
 		case "right", "l":
-			if m.cursor < 4 {
-				m.cursor++
-				if m.currentView != mainView {
-					m.currentView = view(m.cursor + 1)
+			if m.Cursor < 4 {
+				m.Cursor++
+				if m.CurrentView != mainView {
+					m.CurrentView = view(m.Cursor + 1)
 				}
 			}
 
 		case "enter":
-			if m.currentView == mainView {
-				m.currentView = view(m.cursor + 1)
+			if m.CurrentView == mainView {
+				m.CurrentView = view(m.Cursor + 1)
 			}
 
 		case "b", "backspace", "esc":
-			if m.currentView != mainView {
-				m.currentView = mainView
+			if m.CurrentView != mainView {
+				m.CurrentView = mainView
 			}
 
 		case "1", "2", "3", "4", "5":
 			selection := int(msg.String()[0] - '1')
 			if selection >= 0 && selection < 5 {
-				m.cursor = selection
-				if m.currentView == mainView {
-					m.currentView = view(selection + 1)
+				m.Cursor = selection
+				if m.CurrentView == mainView {
+					m.CurrentView = view(selection + 1)
 				} else {
-					m.currentView = view(selection + 1)
+					m.CurrentView = view(selection + 1)
 				}
 			}
 		}
@@ -119,10 +121,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m Model) View() string {
 	var content string
 
-	switch m.currentView {
+	switch m.CurrentView {
 	case mainView:
 		content = m.renderMainView("")
 	case aboutMeView:
@@ -137,11 +139,11 @@ func (m model) View() string {
 		content = m.RenderDetailView("Contact Info", "This is the Contact Info view.")
 	}
 
-	bordered := utils.RenderGradientBorder("#ff5e00ff", "#555555ff", content, m.width, m.height)
+	bordered := utils.RenderGradientBorder("#ff5e00ff", "#555555ff", content, m.Width, m.Height)
 
-	if m.terminalWidth > m.width {
+	if m.TerminalWidth > m.Width {
 		return lipgloss.NewStyle().
-			Width(m.terminalWidth).
+			Width(m.TerminalWidth).
 			AlignHorizontal(lipgloss.Center).
 			Render(bordered)
 	}
@@ -149,7 +151,7 @@ func (m model) View() string {
 	return bordered
 }
 
-func (m model) RenderMainTitle() string {
+func (m Model) RenderMainTitle() string {
 	title :=
 		"  ____ ____  _   _   ____\n" +
 			" / ___/ ___|| | | | |  _ \\ ___  ___ _   _ _ __ ___   ___ \n" +
@@ -160,7 +162,7 @@ func (m model) RenderMainTitle() string {
 	return titleStyle.Render(title)
 }
 
-func (m model) RenderListItems() string {
+func (m Model) RenderListItems() string {
 	listItems := []string{
 		"About Me",
 		"Skills",
@@ -172,7 +174,7 @@ func (m model) RenderListItems() string {
 	for i, item := range listItems {
 		frontCursor := ">"
 		backCursor := "<"
-		if m.cursor == i {
+		if m.Cursor == i {
 			list += fmt.Sprintf("  %s %s %s  ", frontCursor, selectedItemStyle.Render(item), backCursor)
 		} else {
 			list += fmt.Sprintf("    %s    ", itemStyle.Render(item))
@@ -181,11 +183,11 @@ func (m model) RenderListItems() string {
 	return list
 }
 
-func (m model) RenderHelp() string {
+func (m Model) RenderHelp() string {
 	return helpStyle.Render("←/→: navigate • 1-5: quick select • enter: select • q: quit")
 }
 
-func (m model) renderMainView(middleContent string) string {
+func (m Model) renderMainView(middleContent string) string {
 
 	title := m.RenderMainTitle()
 	about := aboutStyle.Render("Welcome to Alan George's interactive resume! Navigate through the sections to learn more about me.")
@@ -195,13 +197,13 @@ func (m model) renderMainView(middleContent string) string {
 	topContent := fmt.Sprintf("%s\n\n%s\n\n%s", title, about, list)
 
 	top := lipgloss.NewStyle().
-		Width(m.width).
+		Width(m.Width).
 		AlignHorizontal(lipgloss.Center).
 		Render(topContent)
 
 	var middle string
 	if middleContent == "" {
-		availableHeight := m.height - 8
+		availableHeight := m.Height - 8
 		topContentHeight := lipgloss.Height(topContent)
 		helpHeight := lipgloss.Height(help)
 		spacerHeight := availableHeight - topContentHeight - helpHeight + 4
@@ -214,27 +216,27 @@ func (m model) renderMainView(middleContent string) string {
 			Render("")
 	} else {
 		middle = lipgloss.NewStyle().
-			Width(m.width).
+			Width(m.Width).
 			AlignHorizontal(lipgloss.Center).
 			Render(middleContent)
 	}
 
 	bottom := lipgloss.NewStyle().
-		Width(m.width - 8).
+		Width(m.Width - 8).
 		AlignHorizontal(lipgloss.Center).
 		Render(help)
 
 	return lipgloss.JoinVertical(lipgloss.Left, top, middle, bottom)
 }
 
-func (m model) RenderDetailView(title, description string) string {
+func (m Model) RenderDetailView(title, description string) string {
 	contentStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("208")).
 		Padding(1, 2).
 		MarginTop(2).
 		MarginBottom(2).
-		Width(m.width - 15).
+		Width(m.Width - 15).
 		Align(lipgloss.Center) // Make it full width minus padding/border
 
 	viewContent := fmt.Sprintf("%s\n\n%s",
