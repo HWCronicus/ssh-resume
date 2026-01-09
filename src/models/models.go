@@ -32,7 +32,6 @@ var (
 	titleStyle = lipgloss.NewStyle().
 			Border(lipgloss.Border{Bottom: "─"}, true).
 			BorderForeground(lipgloss.Color("208")).
-			Bold(true).
 			Foreground(lipgloss.Color("208"))
 
 	aboutStyle = lipgloss.NewStyle().
@@ -53,7 +52,7 @@ var (
 	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
 	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
 	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
-	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
+	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true).Foreground(lipgloss.Color("208")).Underline(true).Bold(true)
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 2).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
 
@@ -84,7 +83,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.TerminalWidth = msg.Width
 		m.Width = min(msg.Width, 200)
-		m.Height = msg.Height
+		m.Height = min(msg.Height, 50)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -158,11 +157,18 @@ func (m Model) View() string {
 
 func (m Model) RenderMainTitle() string {
 	title :=
-		"  ____ ____  _   _   ____\n" +
-			" / ___/ ___|| | | | |  _ \\ ___  ___ _   _ _ __ ___   ___ \n" +
-			" \\___ \\___ \\| |_| | | |_) / _ \\/ __| | | | '_ ` _ \\ / _ \\\n" +
-			"  ___) |__) |  _  | |  _ <  __/\\__ \\ |_| | | | | | |  __/\n" +
-			" |____/____/|_| |_| |_| \\_\\___||___/\\__,_|_| |_| |_|\\___|"
+
+		"  █████████   ████                         █████████                                                   ██████████                        \n" +
+			"  ███░░░░░███ ░░███                        ███░░░░░███                                                 ░░███░░░░███                      \n" +
+			" ░███    ░███  ░███   ██████   ████████   ███     ░░░   ██████   ██████  ████████   ███████  ██████     ░███   ░░███  ██████  █████ █████\n" +
+			" ░███████████  ░███  ░░░░░███ ░░███░░███ ░███          ███░░███ ███░░███░░███░░███ ███░░███ ███░░███    ░███    ░███ ███░░███░░███ ░░███ \n" +
+			" ░███░░░░░███  ░███   ███████  ░███ ░███ ░███    █████░███████ ░███ ░███ ░███ ░░░ ░███ ░███░███████     ░███    ░███░███████  ░███  ░███ \n" +
+			" ░███    ░███  ░███  ███░░███  ░███ ░███ ░░███  ░░███ ░███░░░  ░███ ░███ ░███     ░███ ░███░███░░░      ░███    ███ ░███░░░   ░░███ ███  \n" +
+			" █████   █████ █████░░████████ ████ █████ ░░█████████ ░░██████ ░░██████  █████    ░░███████░░██████  ██ ██████████  ░░██████   ░░█████   \n" +
+			"░░░░░   ░░░░░ ░░░░░  ░░░░░░░░ ░░░░ ░░░░░   ░░░░░░░░░   ░░░░░░   ░░░░░░  ░░░░░      ░░░░░███ ░░░░░░  ░░ ░░░░░░░░░░    ░░░░░░     ░░░░░    \n" +
+			"                                                                                   ███ ░███                                              \n" +
+			"                                                                                  ░░██████                                               \n" +
+			"                                                                                   ░░░░░░                                                \n"
 
 	return titleStyle.Render(title)
 }
@@ -225,7 +231,7 @@ func (m Model) RenderHelp() string {
 func (m Model) renderMainView(middleContent string) string {
 
 	title := m.RenderMainTitle()
-	about := aboutStyle.Render("Welcome to Alan George's interactive resume! Navigate through the sections to learn more about me.")
+	about := aboutStyle.Render("Welcome to Terminal based version of AlanGeorge.Dev, navigate through the sections to learn more about me.")
 
 	var tabs string
 	if middleContent == "" {
