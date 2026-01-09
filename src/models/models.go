@@ -2,10 +2,13 @@ package models
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/HWCronicus/ssh-resume/src/utils"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -26,6 +29,8 @@ type Model struct {
 	Height        int
 	Cursor        int
 	TerminalWidth int
+	Viewport      viewport.Model
+	Ready         bool
 }
 
 var (
@@ -37,13 +42,13 @@ var (
 	aboutStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
 
-	itemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("178"))
+	// itemStyle = lipgloss.NewStyle().
+	// 		Foreground(lipgloss.Color("178"))
 
-	selectedItemStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("208")).
-				Foreground(lipgloss.Color("0")).
-				Bold(true)
+	// selectedItemStyle = lipgloss.NewStyle().
+	// 			Background(lipgloss.Color("208")).
+	// 			Foreground(lipgloss.Color("0")).
+	// 			Bold(true)
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
@@ -53,7 +58,20 @@ var (
 	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
 	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
 	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true).Foreground(lipgloss.Color("208")).Underline(true).Bold(true)
-	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 2).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 2).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop().UnsetBorderBottom()
+
+	infoStyle = func() lipgloss.Style {
+		// b := lipgloss.RoundedBorder()
+		// b.Left = "┤"
+		// b.Right = "├"
+		// b.Top = ""
+		// b.TopLeft = ""
+		// b.TopRight = ""
+		// b.Bottom = ""
+		// b.BottomLeft = ""
+		// b.BottomRight = ""
+		return lipgloss.NewStyle().BorderForeground(highlightColor).Padding(0, 1)
+	}()
 )
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -78,12 +96,30 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.TerminalWidth = msg.Width
 		m.Width = min(msg.Width, 200)
 		m.Height = min(msg.Height, 50)
+
+		if !m.Ready {
+			// Initialize viewport with proper dimensions
+			contentWidth := min(200, m.Width-20)
+			viewportWidth := contentWidth - 4
+			viewportHeight := m.Height - 20
+			m.Viewport = viewport.New(viewportWidth, viewportHeight)
+			m.Viewport.YPosition = 0
+			m.Ready = true
+		} else {
+			contentWidth := min(200, m.Width-20)
+			viewportWidth := contentWidth - 4
+			viewportHeight := m.Height - 20
+			m.Viewport.Width = viewportWidth
+			m.Viewport.Height = viewportHeight
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -103,6 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			m.CurrentView = view(m.Cursor + 1)
+			m.loadViewportContent()
 
 		case "b", "backspace", "esc":
 			if m.CurrentView != mainView {
@@ -118,11 +155,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.CurrentView = view(selection + 1)
 				}
+				m.loadViewportContent()
 			}
 		}
 	}
 
-	return m, nil
+	// Update viewport if we're in a detail view
+	if m.CurrentView != mainView && m.Ready {
+		m.Viewport, cmd = m.Viewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
@@ -173,7 +217,7 @@ func (m Model) RenderMainTitle() string {
 	return titleStyle.Render(title)
 }
 
-func (m Model) RenderTabs(content string) string {
+func (m Model) RenderTabs(content string, showFooter bool) string {
 	tabs := []string{"About Me", "Skills", "Work Experience", "Projects", "Contact Info"}
 
 	var renderedTabs []string
@@ -221,11 +265,60 @@ func (m Model) RenderTabs(content string) string {
 	doc.WriteString("\n")
 	doc.WriteString(windowStyle.Width(contentWidth).Render(content))
 
+	// Add bottom border with scroll percentage if requested
+	if showFooter {
+		footer := m.footerView()
+		if footer != "" {
+			doc.WriteString("\n")
+			doc.WriteString(footer)
+		}
+	} else {
+		// Add regular bottom border without scroll percentage
+		bottomBorder := lipgloss.NewStyle().
+			Foreground(highlightColor).
+			Render("└" + strings.Repeat("─", contentWidth) + "┘")
+		doc.WriteString("\n")
+		doc.WriteString(bottomBorder)
+	}
+
 	return doc.String()
 }
 
 func (m Model) RenderHelp() string {
 	return helpStyle.Render("←/→: navigate • 1-5: quick select • enter: select • q: quit")
+}
+
+func (m Model) footerView() string {
+	if !m.Ready || m.CurrentView == mainView {
+		return ""
+	}
+
+	contentWidth := min(200, m.Width-20)
+
+	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.Viewport.ScrollPercent()*100))
+	infoWidth := lipgloss.Width(info)
+
+	// Calculate the width for the line on the left side (including left corner)
+	leftLineWidth := (contentWidth - infoWidth) / 2
+	if leftLineWidth < 1 {
+		leftLineWidth = 1
+	}
+
+	// Calculate the width for the line on the right side (including right corner)
+	rightLineWidth := contentWidth - infoWidth - leftLineWidth
+	if rightLineWidth < 1 {
+		rightLineWidth = 1
+	}
+
+	leftLine := lipgloss.NewStyle().
+		Foreground(highlightColor).
+		Render("└" + strings.Repeat("─", leftLineWidth-1) + "┤")
+
+	rightLine := lipgloss.NewStyle().
+		Foreground(highlightColor).
+		Render("├" + strings.Repeat("─", rightLineWidth-1) + "┘")
+
+	return lipgloss.JoinHorizontal(lipgloss.Center, leftLine, info, rightLine)
 }
 
 func (m Model) renderMainView(middleContent string) string {
@@ -234,10 +327,11 @@ func (m Model) renderMainView(middleContent string) string {
 	about := aboutStyle.Render("Welcome to Terminal based version of AlanGeorge.Dev, navigate through the sections to learn more about me.")
 
 	var tabs string
+	showFooter := m.CurrentView != mainView && middleContent != ""
 	if middleContent == "" {
-		tabs = m.RenderTabs("Select a section to view details")
+		tabs = m.RenderTabs("Select a section to view details", false)
 	} else {
-		tabs = m.RenderTabs(middleContent)
+		tabs = m.RenderTabs(middleContent, showFooter)
 	}
 
 	help := m.RenderHelp()
@@ -272,17 +366,75 @@ func (m Model) renderMainView(middleContent string) string {
 	return lipgloss.JoinVertical(lipgloss.Top, top, middle, bottom)
 }
 
+func (m *Model) loadViewportContent() tea.Cmd {
+	if !m.Ready {
+		return nil
+	}
+
+	// Map views to markdown files
+	var filename string
+	switch m.CurrentView {
+	case aboutMeView:
+		filename = "content/about-me.md"
+	case skillsView:
+		filename = "content/skills.md"
+	case workExperienceView:
+		filename = "content/work-experience.md"
+	case projectsView:
+		filename = "content/projects.md"
+	case contactInfoView:
+		filename = "content/contact-info.md"
+	default:
+		return nil
+	}
+
+	// Read the markdown file
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		// Fallback content if file doesn't exist
+		errorMsg := fmt.Sprintf("File not found: %s\n\nError: %s\n\nPlease make sure the file exists.", filename, err.Error())
+		m.Viewport.SetContent(errorMsg)
+		return nil
+	}
+
+	// Render markdown with glamour
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(m.Viewport.Width),
+	)
+	if err != nil {
+		// Fallback to plain text if glamour fails
+		m.Viewport.SetContent(string(content))
+		return nil
+	}
+
+	renderedContent, err := renderer.Render(string(content))
+	if err != nil {
+		// Fallback to plain text if rendering fails
+		m.Viewport.SetContent(string(content))
+		return nil
+	}
+
+	m.Viewport.SetContent(renderedContent)
+	m.Viewport.GotoTop()
+	return nil
+}
+
 func (m Model) RenderDetailView(titleText, descriptionText string) string {
+	// Use viewport content if ready, otherwise show placeholder
+	var viewContent string
+	if m.Ready {
+		viewContent = m.Viewport.View()
+		if viewContent == "" {
+			viewContent = "Press a number key (1-5) or use arrow keys and Enter to select a section."
+		}
+	} else {
+		viewContent = "Initializing..."
+	}
+
 	contentStyle := lipgloss.NewStyle().
-		Padding(1, 2).
+		Padding(0, 2).
 		Width(min(200, m.Width-15))
-
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208")).Render(titleText)
-	description := itemStyle.Render(descriptionText)
-
-	viewContent := fmt.Sprintf("%s\n\n%s",
-		title,
-		description)
 
 	middleContent := contentStyle.Render(viewContent)
 
