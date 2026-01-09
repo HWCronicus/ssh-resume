@@ -285,7 +285,7 @@ func (m Model) RenderTabs(content string, showFooter bool) string {
 }
 
 func (m Model) RenderHelp() string {
-	return helpStyle.Render("←/→: navigate • 1-5: quick select • enter: select • q: quit")
+	return helpStyle.Render("←/→: navigate • ↑/↓: scroll • 1-5: quick select • enter: select • q: quit")
 }
 
 func (m Model) footerView() string {
