@@ -41,7 +41,8 @@ var (
 			Foreground(lipgloss.Color("178"))
 
 	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("208")).
+				Background(lipgloss.Color("208")).
+				Foreground(lipgloss.Color("0")).
 				Bold(true)
 
 	helpStyle = lipgloss.NewStyle().
@@ -66,11 +67,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.TerminalWidth = msg.Width
-		if msg.Width > 200 {
-			m.Width = 200
-		} else {
-			m.Width = msg.Width
-		}
+		m.Width = min(msg.Width, 200)
 		m.Height = msg.Height
 		return m, nil
 
@@ -139,7 +136,7 @@ func (m Model) View() string {
 		content = m.RenderDetailView("Contact Info", "This is the Contact Info view.")
 	}
 
-	bordered := utils.RenderGradientBorder("#ff5e00ff", "#555555ff", content, m.Width, m.Height)
+	bordered := utils.RenderGradientBorder("#ff7300", "#666666", content, m.Width, m.Height)
 
 	if m.TerminalWidth > m.Width {
 		return lipgloss.NewStyle().
@@ -229,7 +226,7 @@ func (m Model) renderMainView(middleContent string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, top, middle, bottom)
 }
 
-func (m Model) RenderDetailView(title, description string) string {
+func (m Model) RenderDetailView(titleText, descriptionText string) string {
 	contentStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("208")).
@@ -237,11 +234,14 @@ func (m Model) RenderDetailView(title, description string) string {
 		MarginTop(2).
 		MarginBottom(2).
 		Width(m.Width - 15).
-		Align(lipgloss.Center) // Make it full width minus padding/border
+		Align(lipgloss.Center)
+
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208")).Render(titleText)
+	description := itemStyle.Render(descriptionText)
 
 	viewContent := fmt.Sprintf("%s\n\n%s",
-		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208")).Render(title),
-		itemStyle.Render(description))
+		title,
+		description)
 
 	middleContent := contentStyle.Render(viewContent)
 
