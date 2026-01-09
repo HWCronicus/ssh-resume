@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/HWCronicus/ssh-resume/src/utils"
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,7 +48,22 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+
+	highlightColor    = lipgloss.Color("208")
+	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
+	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
+	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
+	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
+	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 2).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
+
+func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
+	border := lipgloss.RoundedBorder()
+	border.BottomLeft = left
+	border.Bottom = middle
+	border.BottomRight = right
+	return border
+}
 
 func InitialModel(height, width int) Model {
 	return Model{
@@ -79,23 +95,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left", "h":
 			if m.Cursor > 0 {
 				m.Cursor--
-				if m.CurrentView != mainView {
-					m.CurrentView = view(m.Cursor + 1)
-				}
 			}
 
 		case "right", "l":
 			if m.Cursor < 4 {
 				m.Cursor++
-				if m.CurrentView != mainView {
-					m.CurrentView = view(m.Cursor + 1)
-				}
 			}
 
 		case "enter":
-			if m.CurrentView == mainView {
-				m.CurrentView = view(m.Cursor + 1)
-			}
+			m.CurrentView = view(m.Cursor + 1)
 
 		case "b", "backspace", "esc":
 			if m.CurrentView != mainView {
@@ -159,25 +167,55 @@ func (m Model) RenderMainTitle() string {
 	return titleStyle.Render(title)
 }
 
-func (m Model) RenderListItems() string {
-	listItems := []string{
-		"About Me",
-		"Skills",
-		"Work Experience",
-		"Projects",
-		"Contact Info",
-	}
-	var list string
-	for i, item := range listItems {
-		frontCursor := ">"
-		backCursor := "<"
-		if m.Cursor == i {
-			list += fmt.Sprintf("  %s %s %s  ", frontCursor, selectedItemStyle.Render(item), backCursor)
+func (m Model) RenderTabs(content string) string {
+	tabs := []string{"About Me", "Skills", "Work Experience", "Projects", "Contact Info"}
+
+	var renderedTabs []string
+	for i, t := range tabs {
+		var style lipgloss.Style
+		isActive := i == m.Cursor
+		if isActive {
+			style = activeTabStyle
 		} else {
-			list += fmt.Sprintf("    %s    ", itemStyle.Render(item))
+			style = inactiveTabStyle
 		}
+		border, _, _, _, _ := style.GetBorder()
+
+		style = style.Border(border)
+		renderedTabs = append(renderedTabs, style.Render(t))
 	}
-	return list
+
+	contentWidth := min(200, m.Width-20)
+	totalWidth := contentWidth + windowStyle.GetHorizontalFrameSize() - 4
+
+	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
+	tabsWidth := lipgloss.Width(tabRow)
+
+	leftGap := (totalWidth - tabsWidth) / 2
+	rightGap := totalWidth - tabsWidth - leftGap
+
+	var leftBorder string
+	if leftGap > 0 {
+		leftBorder = lipgloss.NewStyle().
+			Foreground(highlightColor).
+			Render("┌" + strings.Repeat("─", leftGap-1))
+	}
+
+	var rightBorder string
+	if rightGap > 0 {
+		rightBorder = lipgloss.NewStyle().
+			Foreground(highlightColor).
+			Render(strings.Repeat("─", rightGap-1) + "┐")
+	}
+
+	row := lipgloss.JoinHorizontal(lipgloss.Bottom, leftBorder, tabRow, rightBorder)
+
+	doc := strings.Builder{}
+	doc.WriteString(row)
+	doc.WriteString("\n")
+	doc.WriteString(windowStyle.Width(contentWidth).Render(content))
+
+	return doc.String()
 }
 
 func (m Model) RenderHelp() string {
@@ -188,53 +226,50 @@ func (m Model) renderMainView(middleContent string) string {
 
 	title := m.RenderMainTitle()
 	about := aboutStyle.Render("Welcome to Alan George's interactive resume! Navigate through the sections to learn more about me.")
-	list := m.RenderListItems()
+
+	var tabs string
+	if middleContent == "" {
+		tabs = m.RenderTabs("Select a section to view details")
+	} else {
+		tabs = m.RenderTabs(middleContent)
+	}
+
 	help := m.RenderHelp()
 
-	topContent := fmt.Sprintf("%s\n\n%s\n\n%s", title, about, list)
+	topContent := fmt.Sprintf("%s\n\n%s\n\n", title, about)
 
 	top := lipgloss.NewStyle().
-		Width(m.Width).
+		Width(m.Width - 8).
 		AlignHorizontal(lipgloss.Center).
 		Render(topContent)
 
-	var middle string
-	if middleContent == "" {
-		availableHeight := m.Height - 8
-		topContentHeight := lipgloss.Height(topContent)
-		helpHeight := lipgloss.Height(help)
-		spacerHeight := availableHeight - topContentHeight - helpHeight + 4
-		if spacerHeight < 0 {
-			spacerHeight = 0
-		}
-
-		middle = lipgloss.NewStyle().
-			Height(spacerHeight).
-			Render("")
-	} else {
-		middle = lipgloss.NewStyle().
-			Width(m.Width).
-			AlignHorizontal(lipgloss.Center).
-			Render(middleContent)
+	availableHeight := m.Height - 8
+	topContentHeight := lipgloss.Height(topContent)
+	helpHeight := lipgloss.Height(help)
+	spacerHeight := availableHeight - topContentHeight - helpHeight + 4
+	if spacerHeight < 0 {
+		spacerHeight = 0
 	}
+
+	middle := lipgloss.NewStyle().
+		Height(spacerHeight).
+		Width(m.Width - 8).
+		PaddingLeft(3).
+		AlignHorizontal(lipgloss.Center).
+		Render(tabs)
 
 	bottom := lipgloss.NewStyle().
 		Width(m.Width - 8).
 		AlignHorizontal(lipgloss.Center).
 		Render(help)
 
-	return lipgloss.JoinVertical(lipgloss.Left, top, middle, bottom)
+	return lipgloss.JoinVertical(lipgloss.Top, top, middle, bottom)
 }
 
 func (m Model) RenderDetailView(titleText, descriptionText string) string {
 	contentStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("208")).
 		Padding(1, 2).
-		MarginTop(2).
-		MarginBottom(2).
-		Width(m.Width - 15).
-		Align(lipgloss.Center)
+		Width(min(200, m.Width-15))
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208")).Render(titleText)
 	description := itemStyle.Render(descriptionText)
