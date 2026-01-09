@@ -23,6 +23,11 @@ const (
 	contactInfoView
 )
 
+const (
+	minWidth  = 150
+	minHeight = 50
+)
+
 type Model struct {
 	CurrentView   view
 	Width         int
@@ -42,14 +47,6 @@ var (
 	aboutStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
 
-	// itemStyle = lipgloss.NewStyle().
-	// 		Foreground(lipgloss.Color("178"))
-
-	// selectedItemStyle = lipgloss.NewStyle().
-	// 			Background(lipgloss.Color("208")).
-	// 			Foreground(lipgloss.Color("0")).
-	// 			Bold(true)
-
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
 
@@ -61,15 +58,6 @@ var (
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 2).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop().UnsetBorderBottom()
 
 	infoStyle = func() lipgloss.Style {
-		// b := lipgloss.RoundedBorder()
-		// b.Left = "┤"
-		// b.Right = "├"
-		// b.Top = ""
-		// b.TopLeft = ""
-		// b.TopRight = ""
-		// b.Bottom = ""
-		// b.BottomLeft = ""
-		// b.BottomRight = ""
 		return lipgloss.NewStyle().BorderForeground(highlightColor).Padding(0, 1)
 	}()
 )
@@ -102,21 +90,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.TerminalWidth = msg.Width
-		m.Width = min(msg.Width, 200)
+		m.Width = min(msg.Width, 150)
 		m.Height = min(msg.Height, 50)
 
 		if !m.Ready {
-			// Initialize viewport with proper dimensions
-			contentWidth := min(200, m.Width-20)
+			contentWidth := min(150, m.Width-20)
 			viewportWidth := contentWidth - 4
-			viewportHeight := m.Height - 20
+			viewportHeight := m.Height - 30
 			m.Viewport = viewport.New(viewportWidth, viewportHeight)
 			m.Viewport.YPosition = 0
 			m.Ready = true
 		} else {
-			contentWidth := min(200, m.Width-20)
+			contentWidth := min(150, m.Width-20)
 			viewportWidth := contentWidth - 4
-			viewportHeight := m.Height - 20
+			viewportHeight := m.Height - 30
 			m.Viewport.Width = viewportWidth
 			m.Viewport.Height = viewportHeight
 		}
@@ -160,7 +147,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Update viewport if we're in a detail view
 	if m.CurrentView != mainView && m.Ready {
 		m.Viewport, cmd = m.Viewport.Update(msg)
 		cmds = append(cmds, cmd)
@@ -170,6 +156,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.TerminalWidth < minWidth || m.Height < minHeight {
+		return m.renderResizeMessage()
+	}
+
 	var content string
 
 	switch m.CurrentView {
@@ -197,6 +187,26 @@ func (m Model) View() string {
 	}
 
 	return bordered
+}
+
+func (m Model) renderResizeMessage() string {
+	messageStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("208")).
+		Align(lipgloss.Center).
+		Width(m.TerminalWidth).
+		Height(m.Height)
+
+	message := fmt.Sprintf(
+		"Your Terminal window is too small.\n\n"+
+			"For an optimal experience, please resize your terminal window.\n\n"+
+			"Current size: %dx%d\n"+
+			"Minimum size: %dx%d\n\n",
+		m.TerminalWidth, m.Height,
+		minWidth, minHeight,
+	)
+
+	return messageStyle.Render(message)
 }
 
 func (m Model) RenderMainTitle() string {
@@ -235,7 +245,7 @@ func (m Model) RenderTabs(content string, showFooter bool) string {
 		renderedTabs = append(renderedTabs, style.Render(t))
 	}
 
-	contentWidth := min(200, m.Width-20)
+	contentWidth := min(150, m.Width-20)
 	totalWidth := contentWidth + windowStyle.GetHorizontalFrameSize() - 4
 
 	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
@@ -265,7 +275,6 @@ func (m Model) RenderTabs(content string, showFooter bool) string {
 	doc.WriteString("\n")
 	doc.WriteString(windowStyle.Width(contentWidth).Render(content))
 
-	// Add bottom border with scroll percentage if requested
 	if showFooter {
 		footer := m.footerView()
 		if footer != "" {
@@ -273,7 +282,6 @@ func (m Model) RenderTabs(content string, showFooter bool) string {
 			doc.WriteString(footer)
 		}
 	} else {
-		// Add regular bottom border without scroll percentage
 		bottomBorder := lipgloss.NewStyle().
 			Foreground(highlightColor).
 			Render("└" + strings.Repeat("─", contentWidth) + "┘")
@@ -293,18 +301,16 @@ func (m Model) footerView() string {
 		return ""
 	}
 
-	contentWidth := min(200, m.Width-20)
+	contentWidth := min(150, m.Width-20)
 
 	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.Viewport.ScrollPercent()*100))
 	infoWidth := lipgloss.Width(info)
 
-	// Calculate the width for the line on the left side (including left corner)
 	leftLineWidth := (contentWidth - infoWidth) / 2
 	if leftLineWidth < 1 {
 		leftLineWidth = 1
 	}
 
-	// Calculate the width for the line on the right side (including right corner)
 	rightLineWidth := contentWidth - infoWidth - leftLineWidth
 	if rightLineWidth < 1 {
 		rightLineWidth = 1
@@ -352,7 +358,7 @@ func (m Model) renderMainView(middleContent string) string {
 	}
 
 	middle := lipgloss.NewStyle().
-		Height(spacerHeight).
+		Height(spacerHeight - 10).
 		Width(m.Width - 8).
 		PaddingLeft(3).
 		AlignHorizontal(lipgloss.Center).
@@ -371,7 +377,6 @@ func (m *Model) loadViewportContent() tea.Cmd {
 		return nil
 	}
 
-	// Map views to markdown files
 	var filename string
 	switch m.CurrentView {
 	case aboutMeView:
@@ -388,29 +393,24 @@ func (m *Model) loadViewportContent() tea.Cmd {
 		return nil
 	}
 
-	// Read the markdown file
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		// Fallback content if file doesn't exist
 		errorMsg := fmt.Sprintf("File not found: %s\n\nError: %s\n\nPlease make sure the file exists.", filename, err.Error())
 		m.Viewport.SetContent(errorMsg)
 		return nil
 	}
 
-	// Render markdown with glamour
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(m.Viewport.Width),
+		glamour.WithWordWrap(m.Viewport.Width-2),
 	)
 	if err != nil {
-		// Fallback to plain text if glamour fails
 		m.Viewport.SetContent(string(content))
 		return nil
 	}
 
 	renderedContent, err := renderer.Render(string(content))
 	if err != nil {
-		// Fallback to plain text if rendering fails
 		m.Viewport.SetContent(string(content))
 		return nil
 	}
@@ -421,7 +421,10 @@ func (m *Model) loadViewportContent() tea.Cmd {
 }
 
 func (m Model) RenderDetailView(titleText, descriptionText string) string {
-	// Use viewport content if ready, otherwise show placeholder
+	if m.TerminalWidth < minWidth || m.Height < minHeight {
+		return m.renderResizeMessage()
+	}
+
 	var viewContent string
 	if m.Ready {
 		viewContent = m.Viewport.View()
@@ -434,7 +437,7 @@ func (m Model) RenderDetailView(titleText, descriptionText string) string {
 
 	contentStyle := lipgloss.NewStyle().
 		Padding(0, 2).
-		Width(min(200, m.Width-15))
+		Width(min(150, m.Width-15))
 
 	middleContent := contentStyle.Render(viewContent)
 
