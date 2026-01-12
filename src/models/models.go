@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/HWCronicus/ssh-resume/src/utils"
+	"github.com/Nomadcxx/sysc-Go/animations"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -15,7 +17,8 @@ import (
 type view int
 
 const (
-	mainView view = iota
+	splashView view = iota
+	mainView
 	aboutMeView
 	skillsView
 	workExperienceView
@@ -24,9 +27,11 @@ const (
 )
 
 const (
-	minWidth  = 150
+	minWidth  = 200
 	minHeight = 50
 )
+
+type splashTimeoutMsg struct{}
 
 type Model struct {
 	CurrentView   view
@@ -36,6 +41,8 @@ type Model struct {
 	TerminalWidth int
 	Viewport      viewport.Model
 	Ready         bool
+	AsciiArt      string
+	Animation     animations.Animation
 }
 
 var (
@@ -71,16 +78,26 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 }
 
 func InitialModel(height, width int) Model {
+	asciiArt, err := os.ReadFile("assets/alan.txt")
+	if err != nil {
+		asciiArt = []byte("AlanGeorge.Dev")
+	}
+
 	return Model{
-		CurrentView: mainView,
-		Cursor:      0,
-		Height:      height,
-		Width:       width,
+		CurrentView:   splashView,
+		Cursor:        0,
+		Height:        height,
+		Width:         width,
+		TerminalWidth: width,
+		AsciiArt:      string(asciiArt),
+		Animation:     nil,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		return splashTimeoutMsg{}
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -88,10 +105,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case splashTimeoutMsg:
+		if m.CurrentView == splashView {
+			if m.TerminalWidth >= minWidth && m.Height >= minHeight {
+				if m.Animation != nil {
+					m.Animation.Update()
+				}
+				return m, tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+					return splashTimeoutMsg{}
+				})
+			}
+			return m, tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+				return splashTimeoutMsg{}
+			})
+		}
+		m.CurrentView = mainView
+		return m, nil
+
 	case tea.WindowSizeMsg:
+		oldWidth := m.TerminalWidth
+		oldHeight := m.Height
+
 		m.TerminalWidth = msg.Width
 		m.Width = min(msg.Width, 150)
 		m.Height = min(msg.Height, 50)
+
+		if m.CurrentView == splashView {
+			if m.TerminalWidth >= minWidth && m.Height >= minHeight {
+				if m.Animation == nil || oldWidth != m.TerminalWidth || oldHeight != m.Height {
+					config := animations.BeamTextConfig{
+						Width:                m.TerminalWidth,
+						Height:               m.Height,
+						Text:                 m.AsciiArt,
+						Auto:                 false,
+						Display:              true,
+						BeamRowSymbols:       []rune{'▂', '▁', '_'},
+						BeamColumnSymbols:    []rune{'▌', '▍', '▎', '▏'},
+						BeamDelay:            2,
+						BeamRowSpeedRange:    [2]int{20, 80},
+						BeamColumnSpeedRange: [2]int{15, 30},
+						BeamGradientStops:    []string{"#ffffff", "#ff7300", "#ff9933"},
+						BeamGradientSteps:    5,
+						BeamGradientFrames:   1,
+						FinalGradientStops:   []string{"#666666", "#ff7300", "#ff9933"},
+						FinalGradientSteps:   8,
+						FinalGradientFrames:  1,
+						FinalWipeSpeed:       3,
+					}
+					m.Animation = animations.NewBeamTextEffect(config)
+				}
+			}
+		}
 
 		if !m.Ready {
 			contentWidth := min(150, m.Width-20)
@@ -110,6 +174,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.CurrentView == splashView {
+			m.CurrentView = mainView
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -125,7 +194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
-			m.CurrentView = view(m.Cursor + 1)
+			m.CurrentView = view(m.Cursor + 2)
 			m.loadViewportContent()
 
 		case "b", "backspace", "esc":
@@ -138,16 +207,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if selection >= 0 && selection < 5 {
 				m.Cursor = selection
 				if m.CurrentView == mainView {
-					m.CurrentView = view(selection + 1)
+					m.CurrentView = view(selection + 2)
 				} else {
-					m.CurrentView = view(selection + 1)
+					m.CurrentView = view(selection + 2)
 				}
 				m.loadViewportContent()
 			}
 		}
 	}
 
-	if m.CurrentView != mainView && m.Ready {
+	if m.CurrentView != mainView && m.CurrentView != splashView && m.Ready {
 		m.Viewport, cmd = m.Viewport.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -158,6 +227,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.TerminalWidth < minWidth || m.Height < minHeight {
 		return m.renderResizeMessage()
+	}
+
+	if m.CurrentView == splashView {
+		return m.renderSplashScreen()
 	}
 
 	var content string
@@ -189,6 +262,36 @@ func (m Model) View() string {
 	return bordered
 }
 
+func (m Model) renderSplashScreen() string {
+	if m.Animation == nil {
+		splashStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("208")).
+			Bold(true).
+			AlignHorizontal(lipgloss.Center).
+			AlignVertical(lipgloss.Center).
+			Width(m.TerminalWidth).
+			Height(m.Height)
+		return splashStyle.Render(string(m.AsciiArt))
+	}
+
+	animationOutput := m.Animation.Render()
+
+	promptText := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		Italic(true).
+		AlignHorizontal(lipgloss.Center).
+		Width(m.TerminalWidth).
+		Render("\n\nPress Enter to continue...")
+
+	combined := animationOutput + promptText
+
+	splashStyle := lipgloss.NewStyle().
+		Width(m.TerminalWidth).
+		Height(m.Height)
+
+	return splashStyle.Render(combined)
+}
+
 func (m Model) renderResizeMessage() string {
 	messageStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -210,21 +313,7 @@ func (m Model) renderResizeMessage() string {
 }
 
 func (m Model) RenderMainTitle() string {
-	title :=
-
-		"  █████████   ████                         █████████                                                   ██████████                        \n" +
-			"  ███░░░░░███ ░░███                        ███░░░░░███                                                 ░░███░░░░███                      \n" +
-			" ░███    ░███  ░███   ██████   ████████   ███     ░░░   ██████   ██████  ████████   ███████  ██████     ░███   ░░███  ██████  █████ █████\n" +
-			" ░███████████  ░███  ░░░░░███ ░░███░░███ ░███          ███░░███ ███░░███░░███░░███ ███░░███ ███░░███    ░███    ░███ ███░░███░░███ ░░███ \n" +
-			" ░███░░░░░███  ░███   ███████  ░███ ░███ ░███    █████░███████ ░███ ░███ ░███ ░░░ ░███ ░███░███████     ░███    ░███░███████  ░███  ░███ \n" +
-			" ░███    ░███  ░███  ███░░███  ░███ ░███ ░░███  ░░███ ░███░░░  ░███ ░███ ░███     ░███ ░███░███░░░      ░███    ███ ░███░░░   ░░███ ███  \n" +
-			" █████   █████ █████░░████████ ████ █████ ░░█████████ ░░██████ ░░██████  █████    ░░███████░░██████  ██ ██████████  ░░██████   ░░█████   \n" +
-			"░░░░░   ░░░░░ ░░░░░  ░░░░░░░░ ░░░░ ░░░░░   ░░░░░░░░░   ░░░░░░   ░░░░░░  ░░░░░      ░░░░░███ ░░░░░░  ░░ ░░░░░░░░░░    ░░░░░░     ░░░░░    \n" +
-			"                                                                                   ███ ░███                                              \n" +
-			"                                                                                  ░░██████                                               \n" +
-			"                                                                                   ░░░░░░                                                \n"
-
-	return titleStyle.Render(title)
+	return titleStyle.Render(string(m.AsciiArt))
 }
 
 func (m Model) RenderTabs(content string, showFooter bool) string {
