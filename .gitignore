@@ -32,3 +32,6 @@ go.work.sum
 .vscode/
 .ssh/
 /.ssh/
+
+# Logs
+*.log

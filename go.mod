@@ -12,7 +12,9 @@ require (
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
 	github.com/charmbracelet/wish v1.4.7
 	github.com/charmbracelet/x/term v0.2.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/lucasb-eyer/go-colorful v1.3.0
+	golang.org/x/crypto v0.37.0
 )
 
 require (
@@ -49,7 +51,6 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
-	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect

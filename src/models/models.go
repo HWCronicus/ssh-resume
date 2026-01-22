@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HWCronicus/ssh-resume/src/utils"
+	gradient "github.com/HWCronicus/ssh-resume/src/utils"
 	"github.com/Nomadcxx/sysc-Go/animations"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -250,7 +250,7 @@ func (m Model) View() string {
 		content = m.RenderDetailView("Contact Info", "This is the Contact Info view.")
 	}
 
-	bordered := utils.RenderGradientBorder("#ff7300", "#666666", content, m.Width, m.Height)
+	bordered := gradient.RenderGradientBorder("#ff7300", "#666666", content, m.Width, m.Height)
 
 	if m.TerminalWidth > m.Width {
 		return lipgloss.NewStyle().

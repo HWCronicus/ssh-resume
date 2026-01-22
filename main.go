@@ -3,23 +3,65 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/HWCronicus/ssh-resume/src/models"
 	"github.com/HWCronicus/ssh-resume/src/server"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/term"
+	logger "github.com/HWCronicus/ssh-resume/src/utils"
+)
+
+const (
+	host     = "localhost"
+	sshPort  = "42069"
+	httpPort = "8000"
 )
 
 func main() {
-	width, height, err := term.GetSize(os.Stdout.Fd())
-	if err != nil {
-		width, height = 200, 50
-	}
-	p := tea.NewProgram(models.InitialModel(height, width), tea.WithAltScreen(), tea.WithMouseCellMotion())
 
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v", err)
+	//Start logger
+	if err := logger.InitLogger(); err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	server.StartServer()
+	defer logger.CloseLogger()
+
+	logger.LogInfo("Starting SSH Resume application")
+
+	logger.LogInfo(fmt.Sprintf("Starting wish servers on %s:%s", host, sshPort))
+	logger.LogInfo(fmt.Sprintf("Starting servers on %s:%s", host, sshPort))
+
+	// Start both servers asynchronously
+	go server.StartWishServer(host, sshPort)
+	go server.StartHTTPServer(host, httpPort, sshPort)
+
+	// Uncomment the following lines to run the TUI locally instead of via SSH
+	// This will start the TUI application directly in the terminal
+
+	/*
+		Give servers a moment to start
+		time.Sleep(500 * time.Microsecond)
+		width, height, err := term.GetSize(os.Stdout.Fd())
+		if err != nil {
+			width, height = 200, 50
+		}
+		logger.LogInfo(fmt.Sprintf("Terminal size: %dx%d", width, height))
+		p := tea.NewProgram(models.InitialModel(height, width), tea.WithAltScreen(), tea.WithMouseCellMotion())
+
+		if _, err := p.Run(); err != nil {
+			logger.LogError("TUI application failed", err)
+			os.Exit(1)
+		}
+
+		After TUI exits, keep the SSH server running
+		logger.LogInfo("TUI application closed, SSH server still running")
+	*/
+
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	logger.LogInfo("Shutdown signal received")
+	fmt.Println("\nShutting down...")
+	os.Exit(0)
 }
